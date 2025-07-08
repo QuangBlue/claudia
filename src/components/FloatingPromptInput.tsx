@@ -25,6 +25,7 @@ import { SlashCommandPicker } from "./SlashCommandPicker";
 import { ImagePreview } from "./ImagePreview";
 import { type FileEntry, type SlashCommand } from "@/lib/api";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { Toast, ToastContainer } from "@/components/ui/toast";
 
 interface FloatingPromptInputProps {
   /**
@@ -205,6 +206,7 @@ const FloatingPromptInputInner = (
   const [imageDataMap, setImageDataMap] = useState<Map<string, string>>(
     new Map()
   );
+  const [showVSCodeToast, setShowVSCodeToast] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const expandedTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -388,6 +390,105 @@ const FloatingPromptInputInner = (
     return ["png", "jpg", "jpeg", "gif", "svg", "webp", "ico", "bmp"].includes(
       ext || ""
     );
+  };
+
+  // Extract all file paths from prompt text (not just images)
+  const extractAllFilePaths = (text: string): string[] => {
+    console.log(
+      "[extractAllFilePaths] Input text:",
+      text.substring(0, 100) + (text.length > 100 ? "..." : "")
+    );
+    console.log("[extractAllFilePaths] imageDataMap size:", imageDataMap.size);
+
+    // Updated regex to handle both quoted and unquoted paths
+    // Pattern 1: @"path with spaces or data URLs or image IDs" - quoted paths
+    // Pattern 2: @path - unquoted paths (continues until @ or end)
+    const quotedRegex = /@"([^"]+)"/g;
+    const unquotedRegex = /@([^@\n\s]+)/g;
+
+    const pathsSet = new Set<string>(); // Use Set to ensure uniqueness
+
+    // First, extract quoted paths (including data URLs and image IDs)
+    let matches = Array.from(text.matchAll(quotedRegex));
+    console.log("[extractAllFilePaths] Quoted matches:", matches.length);
+
+    for (const match of matches) {
+      const path = match[1]; // No need to trim, quotes preserve exact path
+      console.log(
+        "[extractAllFilePaths] Processing quoted path:",
+        path.startsWith("data:")
+          ? "data URL"
+          : path.startsWith("img_")
+          ? `image ID: ${path}`
+          : `file path: ${path}`
+      );
+
+      // Check if it's an image ID in our map
+      if (path.startsWith("img_") && imageDataMap.has(path)) {
+        const actualImageData = imageDataMap.get(path)!;
+        console.log(
+          "[extractAllFilePaths] Found image ID in map, using actual data"
+        );
+        pathsSet.add(actualImageData);
+        continue;
+      }
+
+      // For data URLs, use as-is; for file paths, convert to absolute
+      const fullPath = path.startsWith("data:")
+        ? path
+        : path.startsWith("/")
+        ? path
+        : projectPath
+        ? `${projectPath}/${path}`
+        : path;
+
+      // Accept all file types, not just images
+      console.log(
+        "[extractAllFilePaths] Added file path:",
+        fullPath.startsWith("data:") ? "data URL" : fullPath
+      );
+      pathsSet.add(fullPath);
+    }
+
+    // Remove quoted mentions from text to avoid double-matching
+    let textWithoutQuoted = text.replace(quotedRegex, "");
+
+    // Then extract unquoted paths (typically file paths)
+    matches = Array.from(textWithoutQuoted.matchAll(unquotedRegex));
+    console.log("[extractAllFilePaths] Unquoted matches:", matches.length);
+
+    for (const match of matches) {
+      const path = match[1].trim();
+      // Skip if it looks like a data URL fragment or image ID (shouldn't happen with proper quoting)
+      if (path.includes("data:") || path.startsWith("img_")) {
+        console.log(
+          "[extractAllFilePaths] Skipping unquoted data/imageId:",
+          path.substring(0, 20)
+        );
+        continue;
+      }
+
+      console.log("[extractAllFilePaths] Processing unquoted path:", path);
+
+      // Convert relative path to absolute if needed
+      const fullPath = path.startsWith("/")
+        ? path
+        : projectPath
+        ? `${projectPath}/${path}`
+        : path;
+
+      // Accept all file types
+      console.log("[extractAllFilePaths] Added unquoted file path:", fullPath);
+      pathsSet.add(fullPath);
+    }
+
+    const uniquePaths = Array.from(pathsSet);
+    console.log(
+      "[extractAllFilePaths] Final result:",
+      uniquePaths.length,
+      "unique paths"
+    );
+    return uniquePaths;
   };
 
   // Extract image paths from prompt text
@@ -574,7 +675,7 @@ const FloatingPromptInputInner = (
             setDragActive(true);
           } else if (event.payload.type === "leave") {
             setDragActive(false);
-          } else if (event.payload.type === "drop" && event.payload.paths) {
+          } else if (event.payload.type === "drop") {
             setDragActive(false);
 
             const currentTime = Date.now();
@@ -585,30 +686,123 @@ const FloatingPromptInputInner = (
             }
             lastDropTime = currentTime;
 
-            const droppedPaths = event.payload.paths as string[];
-            const imagePaths = droppedPaths.filter(isImageFile);
+            // Handle both cases: with paths and without paths
+            const droppedPaths = (event.payload.paths as string[]) || [];
 
-            if (imagePaths.length > 0) {
+            // Debug: Log the drag source and paths
+            console.log("[DRAG DEBUG] Drop event received:");
+            console.log("[DRAG DEBUG] Paths count:", droppedPaths.length);
+            console.log("[DRAG DEBUG] Raw paths:", droppedPaths);
+            console.log("[DRAG DEBUG] Event payload:", event.payload);
+
+            // Check if this might be a VSCode drag (no paths provided)
+            if (droppedPaths.length === 0) {
+              console.log(
+                "[DRAG DEBUG] No paths provided - likely VSCode drag"
+              );
+
+              // Show a helpful message to user
+              console.warn(
+                "[DRAG] VSCode drag detected: VSCode doesn't provide file paths in drag & drop. Please use @ to mention files or drag from Finder instead."
+              );
+
+              // Show toast notification
+              setShowVSCodeToast(true);
+              return;
+            }
+
+            // Check if paths exist and are accessible
+            droppedPaths.forEach((path, index) => {
+              console.log(`[DRAG DEBUG] Path ${index}:`, {
+                originalPath: path,
+                pathType: typeof path,
+                pathLength: path.length,
+                isAbsolute: path.startsWith("/"),
+                exists: path ? "path provided" : "no path",
+                platform: navigator.platform,
+              });
+            });
+
+            // Normalize and filter file paths
+            const filePaths = droppedPaths
+              .map((path) => {
+                // Handle different path formats
+                let normalizedPath = path;
+
+                // Remove file:// URI scheme if present
+                if (normalizedPath.startsWith("file://")) {
+                  normalizedPath = decodeURIComponent(
+                    normalizedPath.replace("file://", "")
+                  );
+                }
+
+                // Handle VSCode specific URIs
+                if (normalizedPath.includes("vscode://")) {
+                  console.log(
+                    "[DRAG DEBUG] VSCode URI detected:",
+                    normalizedPath
+                  );
+                  // VSCode URIs need special handling - might not be droppable files
+                  return null;
+                }
+
+                // Ensure absolute path
+                if (!normalizedPath.startsWith("/") && projectPath) {
+                  normalizedPath = `${projectPath}/${normalizedPath}`;
+                }
+
+                console.log("[DRAG DEBUG] Path normalization:", {
+                  original: path,
+                  normalized: normalizedPath,
+                });
+
+                return normalizedPath;
+              })
+              .filter((path) => path !== null) as string[];
+
+            if (filePaths.length > 0) {
+              console.log("[DRAG DEBUG] Processing file paths...");
+
               setPrompt((currentPrompt) => {
-                const existingPaths = extractImagePaths(currentPrompt);
-                const newPaths = imagePaths.filter(
-                  (p) => !existingPaths.includes(p)
+                console.log(
+                  "[DRAG DEBUG] Current prompt length:",
+                  currentPrompt.length
                 );
 
+                // Extract all file paths from current prompt (not just images)
+                const existingPaths = extractAllFilePaths(currentPrompt);
+                console.log(
+                  "[DRAG DEBUG] Existing paths in prompt:",
+                  existingPaths
+                );
+
+                const newPaths = filePaths.filter(
+                  (p) => !existingPaths.includes(p)
+                );
+                console.log("[DRAG DEBUG] New paths to add:", newPaths);
+
                 if (newPaths.length === 0) {
-                  return currentPrompt; // All dropped images are already in the prompt
+                  console.log(
+                    "[DRAG DEBUG] All files already in prompt, skipping"
+                  );
+                  return currentPrompt; // All dropped files are already in the prompt
                 }
 
                 // Wrap paths with spaces in quotes for clarity
                 const mentionsToAdd = newPaths
                   .map((p) => {
                     // If path contains spaces, wrap in quotes
-                    if (p.includes(" ")) {
-                      return `@"${p}"`;
-                    }
-                    return `@${p}`;
+                    const mention = p.includes(" ") ? `@"${p}"` : `@${p}`;
+                    console.log("[DRAG DEBUG] Created mention:", mention);
+                    return mention;
                   })
                   .join(" ");
+
+                console.log(
+                  "[DRAG DEBUG] Final mentions to add:",
+                  mentionsToAdd
+                );
+
                 const newPrompt =
                   currentPrompt +
                   (currentPrompt.endsWith(" ") || currentPrompt === ""
@@ -616,6 +810,15 @@ const FloatingPromptInputInner = (
                     : " ") +
                   mentionsToAdd +
                   " ";
+
+                console.log(
+                  "[DRAG DEBUG] New prompt length:",
+                  newPrompt.length
+                );
+                console.log(
+                  "[DRAG DEBUG] New prompt preview:",
+                  newPrompt.substring(newPrompt.length - 100)
+                );
 
                 setTimeout(() => {
                   const target = isExpanded
@@ -627,6 +830,8 @@ const FloatingPromptInputInner = (
 
                 return newPrompt;
               });
+            } else {
+              console.log("[DRAG DEBUG] No file paths to process");
             }
           }
         });
@@ -1194,6 +1399,18 @@ const FloatingPromptInputInner = (
 
   return (
     <>
+      {/* Toast Container */}
+      <ToastContainer>
+        {showVSCodeToast && (
+          <Toast
+            message="VSCode drag not supported. Use @ to mention files or drag from Finder instead."
+            type="info"
+            duration={4000}
+            onDismiss={() => setShowVSCodeToast(false)}
+          />
+        )}
+      </ToastContainer>
+
       {/* Expanded Modal */}
       <AnimatePresence>
         {isExpanded && (
@@ -1538,9 +1755,7 @@ const FloatingPromptInputInner = (
                   onKeyDown={handleKeyDown}
                   onPaste={handlePaste}
                   placeholder={
-                    dragActive
-                      ? "Drop images here..."
-                      : "Ask Claude anything..."
+                    dragActive ? "Drop files here..." : "Ask Claude anything..."
                   }
                   disabled={disabled}
                   className={cn(
@@ -1590,7 +1805,7 @@ const FloatingPromptInputInner = (
             <div className="mt-2 text-xs text-muted-foreground">
               Press Enter to send, Shift+Enter for new line
               {projectPath?.trim() &&
-                ", @ to mention files, / for commands, drag & drop or paste images"}
+                ", @ to mention files, / for commands, drag & drop files or paste images"}
             </div>
           </div>
         </div>
