@@ -197,6 +197,54 @@ fn find_markdown_files(dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
     Ok(())
 }
 
+/// Create default/built-in slash commands
+fn create_default_commands() -> Vec<SlashCommand> {
+    vec![
+        SlashCommand {
+            id: "default-add-dir".to_string(),
+            name: "add-dir".to_string(),
+            full_command: "/add-dir".to_string(),
+            scope: "default".to_string(),
+            namespace: None,
+            file_path: "".to_string(),
+            content: "Add additional working directories".to_string(),
+            description: Some("Add additional working directories".to_string()),
+            allowed_tools: vec![],
+            has_bash_commands: false,
+            has_file_references: false,
+            accepts_arguments: false,
+        },
+        SlashCommand {
+            id: "default-init".to_string(),
+            name: "init".to_string(),
+            full_command: "/init".to_string(),
+            scope: "default".to_string(),
+            namespace: None,
+            file_path: "".to_string(),
+            content: "Initialize project with CLAUDE.md guide".to_string(),
+            description: Some("Initialize project with CLAUDE.md guide".to_string()),
+            allowed_tools: vec![],
+            has_bash_commands: false,
+            has_file_references: false,
+            accepts_arguments: false,
+        },
+        SlashCommand {
+            id: "default-review".to_string(),
+            name: "review".to_string(),
+            full_command: "/review".to_string(),
+            scope: "default".to_string(),
+            namespace: None,
+            file_path: "".to_string(),
+            content: "Request code review".to_string(),
+            description: Some("Request code review".to_string()),
+            allowed_tools: vec![],
+            has_bash_commands: false,
+            has_file_references: false,
+            accepts_arguments: false,
+        },
+    ]
+}
+
 /// Discover all custom slash commands
 #[tauri::command]
 pub async fn slash_commands_list(
@@ -204,6 +252,9 @@ pub async fn slash_commands_list(
 ) -> Result<Vec<SlashCommand>, String> {
     info!("Discovering slash commands");
     let mut commands = Vec::new();
+    
+    // Add default commands
+    commands.extend(create_default_commands());
     
     // Load project commands if project path is provided
     if let Some(proj_path) = project_path {
@@ -365,11 +416,25 @@ pub async fn slash_command_save(
 
 /// Delete a slash command
 #[tauri::command]
-pub async fn slash_command_delete(command_id: String) -> Result<String, String> {
+pub async fn slash_command_delete(command_id: String, project_path: Option<String>) -> Result<String, String> {
     info!("Deleting slash command: {}", command_id);
     
-    // Get the command to find its file path
-    let command = slash_command_get(command_id.clone()).await?;
+    // First, we need to determine if this is a project command by parsing the ID
+    let is_project_command = command_id.starts_with("project-");
+    
+    // If it's a project command and we don't have a project path, error out
+    if is_project_command && project_path.is_none() {
+        return Err("Project path required to delete project commands".to_string());
+    }
+    
+    // List all commands (including project commands if applicable)
+    let commands = slash_commands_list(project_path).await?;
+    
+    // Find the command by ID
+    let command = commands
+        .into_iter()
+        .find(|cmd| cmd.id == command_id)
+        .ok_or_else(|| format!("Command not found: {}", command_id))?;
     
     // Delete the file
     fs::remove_file(&command.file_path)
