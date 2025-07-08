@@ -184,6 +184,8 @@ const FloatingPromptInputInner = (
   ref: React.Ref<FloatingPromptInputRef>
 ) => {
   const [prompt, setPrompt] = useState("");
+  // Add separate display prompt that hides image IDs from user
+  const [displayPrompt, setDisplayPrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState<"sonnet" | "opus">(
     defaultModel
   );
@@ -199,10 +201,77 @@ const FloatingPromptInputInner = (
   const [cursorPosition, setCursorPosition] = useState(0);
   const [embeddedImages, setEmbeddedImages] = useState<string[]>([]);
   const [dragActive, setDragActive] = useState(false);
+  // Add state to store image data separately from display text
+  const [imageDataMap, setImageDataMap] = useState<Map<string, string>>(
+    new Map()
+  );
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const expandedTextareaRef = useRef<HTMLTextAreaElement>(null);
   const unlistenDragDropRef = useRef<(() => void) | null>(null);
+
+  // Helper function to generate a short unique ID for images
+  const generateImageId = (): string => {
+    return `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  };
+
+  // Debug helper function
+  const debugCurrentState = (source: string) => {
+    console.log(`[DEBUG ${source}] Prompt length: ${prompt.length}`);
+    console.log(
+      `[DEBUG ${source}] Display prompt length: ${displayPrompt.length}`
+    );
+    console.log(
+      `[DEBUG ${source}] ImageDataMap size: ${imageDataMap.size}, keys:`,
+      Array.from(imageDataMap.keys())
+    );
+    console.log(
+      `[DEBUG ${source}] EmbeddedImages count: ${embeddedImages.length}`
+    );
+
+    // Check for image IDs in prompt
+    const quotedRegex = /@"([^"]+)"/g;
+    const idsInPrompt: string[] = [];
+    let match;
+    while ((match = quotedRegex.exec(prompt)) !== null) {
+      const path = match[1];
+      if (path.startsWith("img_")) {
+        idsInPrompt.push(path);
+      }
+    }
+    console.log(`[DEBUG ${source}] Image IDs in prompt:`, idsInPrompt);
+  };
+
+  // Function to create display prompt with image placeholders
+  const createDisplayPrompt = (actualPrompt: string): string => {
+    let display = actualPrompt;
+
+    // Replace image IDs with user-friendly placeholders
+    for (const [imageId, imageData] of imageDataMap.entries()) {
+      const imageIdPattern = new RegExp(
+        `@"${imageId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`,
+        "g"
+      );
+      display = display.replace(imageIdPattern, `📷 [Image]`);
+    }
+
+    return display;
+  };
+
+  // Function to convert display prompt back to actual prompt for processing
+  const convertDisplayToActual = (display: string): string => {
+    // This will be handled by maintaining the actual prompt separately
+    // Display prompt is just for viewing, actual prompt handles logic
+    return prompt; // Return the actual prompt, not the display one
+  };
+
+  // Update display prompt when actual prompt or imageDataMap changes
+  useEffect(() => {
+    const newDisplayPrompt = createDisplayPrompt(prompt);
+    if (newDisplayPrompt !== displayPrompt) {
+      setDisplayPrompt(newDisplayPrompt);
+    }
+  }, [prompt, imageDataMap]);
 
   // Expose a method to add images programmatically
   React.useImperativeHandle(
@@ -211,6 +280,61 @@ const FloatingPromptInputInner = (
       addImage: (imagePath: string) => {
         setPrompt((currentPrompt) => {
           const existingPaths = extractImagePaths(currentPrompt);
+
+          // For base64 data URLs, check if already added by comparing actual data
+          if (imagePath.startsWith("data:")) {
+            if (existingPaths.includes(imagePath)) {
+              return currentPrompt; // Image already added
+            }
+
+            // Generate an ID for this base64 image
+            const imageId = generateImageId();
+
+            // Store the base64 data in our map
+            setImageDataMap((prev) => {
+              const newMap = new Map(prev);
+              newMap.set(imageId, imagePath);
+              return newMap;
+            });
+
+            // Use the image ID in the actual prompt
+            const mention = `@"${imageId}"`;
+            const newActualPrompt =
+              currentPrompt +
+              (currentPrompt.endsWith(" ") || currentPrompt === "" ? "" : " ") +
+              mention +
+              " ";
+
+            // Update display prompt with placeholder
+            setDisplayPrompt((currentDisplayPrompt) => {
+              const displayMention = `📷 [Image]`;
+              return (
+                currentDisplayPrompt +
+                (currentDisplayPrompt.endsWith(" ") ||
+                currentDisplayPrompt === ""
+                  ? ""
+                  : " ") +
+                displayMention +
+                " "
+              );
+            });
+
+            // Focus the textarea
+            setTimeout(() => {
+              const target = isExpanded
+                ? expandedTextareaRef.current
+                : textareaRef.current;
+              target?.focus();
+              target?.setSelectionRange(
+                newActualPrompt.length,
+                newActualPrompt.length
+              );
+            }, 0);
+
+            return newActualPrompt;
+          }
+
+          // For file paths, use existing logic
           if (existingPaths.includes(imagePath)) {
             return currentPrompt; // Image already added
           }
@@ -225,6 +349,18 @@ const FloatingPromptInputInner = (
             mention +
             " ";
 
+          // For file paths, display and actual are the same
+          setDisplayPrompt((currentDisplayPrompt) => {
+            return (
+              currentDisplayPrompt +
+              (currentDisplayPrompt.endsWith(" ") || currentDisplayPrompt === ""
+                ? ""
+                : " ") +
+              mention +
+              " "
+            );
+          });
+
           // Focus the textarea
           setTimeout(() => {
             const target = isExpanded
@@ -238,7 +374,7 @@ const FloatingPromptInputInner = (
         });
       },
     }),
-    [isExpanded]
+    [isExpanded, imageDataMap]
   );
 
   // Helper function to check if a file is an image
@@ -256,17 +392,21 @@ const FloatingPromptInputInner = (
 
   // Extract image paths from prompt text
   const extractImagePaths = (text: string): string[] => {
-    console.log("[extractImagePaths] Input text length:", text.length);
+    console.log(
+      "[extractImagePaths] Input text:",
+      text.substring(0, 100) + (text.length > 100 ? "..." : "")
+    );
+    console.log("[extractImagePaths] imageDataMap size:", imageDataMap.size);
 
     // Updated regex to handle both quoted and unquoted paths
-    // Pattern 1: @"path with spaces or data URLs" - quoted paths
+    // Pattern 1: @"path with spaces or data URLs or image IDs" - quoted paths
     // Pattern 2: @path - unquoted paths (continues until @ or end)
     const quotedRegex = /@"([^"]+)"/g;
     const unquotedRegex = /@([^@\n\s]+)/g;
 
     const pathsSet = new Set<string>(); // Use Set to ensure uniqueness
 
-    // First, extract quoted paths (including data URLs)
+    // First, extract quoted paths (including data URLs and image IDs)
     let matches = Array.from(text.matchAll(quotedRegex));
     console.log("[extractImagePaths] Quoted matches:", matches.length);
 
@@ -274,8 +414,22 @@ const FloatingPromptInputInner = (
       const path = match[1]; // No need to trim, quotes preserve exact path
       console.log(
         "[extractImagePaths] Processing quoted path:",
-        path.startsWith("data:") ? "data URL" : path
+        path.startsWith("data:")
+          ? "data URL"
+          : path.startsWith("img_")
+          ? `image ID: ${path}`
+          : `file path: ${path}`
       );
+
+      // Check if it's an image ID in our map
+      if (path.startsWith("img_") && imageDataMap.has(path)) {
+        const actualImageData = imageDataMap.get(path)!;
+        console.log(
+          "[extractImagePaths] Found image ID in map, using actual data"
+        );
+        pathsSet.add(actualImageData);
+        continue;
+      }
 
       // For data URLs, use as-is; for file paths, convert to absolute
       const fullPath = path.startsWith("data:")
@@ -287,6 +441,10 @@ const FloatingPromptInputInner = (
         : path;
 
       if (isImageFile(fullPath)) {
+        console.log(
+          "[extractImagePaths] Added image path:",
+          fullPath.startsWith("data:") ? "data URL" : fullPath
+        );
         pathsSet.add(fullPath);
       }
     }
@@ -300,8 +458,14 @@ const FloatingPromptInputInner = (
 
     for (const match of matches) {
       const path = match[1].trim();
-      // Skip if it looks like a data URL fragment (shouldn't happen with proper quoting)
-      if (path.includes("data:")) continue;
+      // Skip if it looks like a data URL fragment or image ID (shouldn't happen with proper quoting)
+      if (path.includes("data:") || path.startsWith("img_")) {
+        console.log(
+          "[extractImagePaths] Skipping unquoted data/imageId:",
+          path.substring(0, 20)
+        );
+        continue;
+      }
 
       console.log("[extractImagePaths] Processing unquoted path:", path);
 
@@ -313,25 +477,84 @@ const FloatingPromptInputInner = (
         : path;
 
       if (isImageFile(fullPath)) {
+        console.log("[extractImagePaths] Added unquoted image path:", fullPath);
         pathsSet.add(fullPath);
       }
     }
 
     const uniquePaths = Array.from(pathsSet);
     console.log(
-      "[extractImagePaths] Final extracted paths (unique):",
-      uniquePaths.length
+      "[extractImagePaths] Final result:",
+      uniquePaths.length,
+      "unique paths"
     );
     return uniquePaths;
   };
 
   // Update embedded images when prompt changes
   useEffect(() => {
-    console.log("[useEffect] Prompt changed:", prompt);
+    console.log(
+      "[useEffect:extractImages] Prompt changed:",
+      prompt.length,
+      "chars"
+    );
     const imagePaths = extractImagePaths(prompt);
-    console.log("[useEffect] Setting embeddedImages to:", imagePaths);
-    setEmbeddedImages(imagePaths);
+    console.log(
+      "[useEffect:extractImages] Extracted image paths:",
+      imagePaths.length
+    );
+
+    // Only update if there's actually a change to avoid unnecessary re-renders
+    const currentPathsStr = embeddedImages.join("|");
+    const newPathsStr = imagePaths.join("|");
+
+    if (currentPathsStr !== newPathsStr) {
+      console.log(
+        "[useEffect:extractImages] Image paths changed, updating embeddedImages"
+      );
+      setEmbeddedImages(imagePaths);
+    }
   }, [prompt, projectPath]);
+
+  // Clean up imageDataMap when image IDs are removed from prompt
+  useEffect(() => {
+    if (imageDataMap.size === 0) return;
+
+    console.log(
+      "[useEffect:cleanupImages] Checking for cleanup, map size:",
+      imageDataMap.size
+    );
+
+    // Find image IDs still in prompt
+    const quotedRegex = /@"([^"]+)"/g;
+    const imageIdsInPrompt = new Set<string>();
+    let match;
+    const tempPrompt = prompt; // Create temp var to avoid re-running regex exec
+    while ((match = quotedRegex.exec(tempPrompt)) !== null) {
+      const path = match[1];
+      if (path.startsWith("img_")) {
+        imageIdsInPrompt.add(path);
+      }
+    }
+
+    // Remove any image IDs from map that are no longer in prompt
+    const currentImageIds = Array.from(imageDataMap.keys());
+    const idsToRemove = currentImageIds.filter(
+      (id) => !imageIdsInPrompt.has(id)
+    );
+
+    if (idsToRemove.length > 0) {
+      console.log(
+        "[useEffect:cleanupImages] Cleaning up unused image IDs:",
+        idsToRemove
+      );
+      setImageDataMap((prev) => {
+        const newMap = new Map(prev);
+        idsToRemove.forEach((id) => newMap.delete(id));
+        return newMap;
+      });
+    }
+  }, [prompt, imageDataMap]); // This useEffect can safely depend on imageDataMap
 
   // Set up Tauri drag-drop event listener
   useEffect(() => {
@@ -432,10 +655,10 @@ const FloatingPromptInputInner = (
     }
   }, [isExpanded]);
 
-  // Reset textarea height when prompt is cleared
+  // Reset textarea height when display prompt is cleared
   useEffect(() => {
     if (textareaRef.current) {
-      if (prompt === "") {
+      if (displayPrompt === "") {
         textareaRef.current.style.height = "44px";
       } else {
         // Recalculate height for existing content
@@ -444,11 +667,20 @@ const FloatingPromptInputInner = (
         textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
       }
     }
-  }, [prompt]);
+  }, [displayPrompt]);
 
   const handleSend = () => {
-    if (prompt.trim() && !disabled) {
-      let finalPrompt = prompt.trim();
+    if (displayPrompt.trim() && !disabled) {
+      let finalPrompt = prompt.trim(); // Use actual prompt, not display prompt
+
+      // Replace image IDs with actual base64 data before sending
+      for (const [imageId, imageData] of imageDataMap.entries()) {
+        const imageIdPattern = new RegExp(
+          `@"${imageId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`,
+          "g"
+        );
+        finalPrompt = finalPrompt.replace(imageIdPattern, `@"${imageData}"`);
+      }
 
       // Append thinking phrase if not auto mode
       const thinkingMode = THINKING_MODES.find(
@@ -460,28 +692,87 @@ const FloatingPromptInputInner = (
 
       onSend(finalPrompt, selectedModel);
       setPrompt("");
+      setDisplayPrompt("");
       setEmbeddedImages([]);
+      // Clear the image data map when prompt is sent
+      setImageDataMap(new Map());
     }
   };
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newValue = e.target.value;
+    const newDisplayValue = e.target.value;
     const newCursorPosition = e.target.selectionStart || 0;
+
+    debugCurrentState("handleTextChange-START");
+    console.log(
+      "[handleTextChange] Old display value length:",
+      displayPrompt.length,
+      "New display value length:",
+      newDisplayValue.length
+    );
 
     // Auto-resize textarea
     const textarea = e.target;
     textarea.style.height = "auto";
     textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
 
+    // Update display prompt
+    setDisplayPrompt(newDisplayValue);
+
+    // Convert display changes back to actual prompt
+    // For now, we'll reconstruct the actual prompt by preserving image IDs and updating text around them
+    let newActualPrompt = newDisplayValue;
+
+    // Replace image placeholders back with their IDs if they still exist in the display
+    const placeholderRegex = /📷 \[Image\]/g;
+    const imageIds = Array.from(imageDataMap.keys());
+    let imageIndex = 0;
+
+    newActualPrompt = newDisplayValue.replace(placeholderRegex, () => {
+      if (imageIndex < imageIds.length) {
+        return `@"${imageIds[imageIndex++]}"`;
+      }
+      return "📷 [Image]"; // Fallback if more placeholders than IDs
+    });
+
+    // If user removed some image placeholders, we need to clean up the corresponding IDs
+    const remainingPlaceholders = (
+      newDisplayValue.match(placeholderRegex) || []
+    ).length;
+    if (remainingPlaceholders < imageDataMap.size) {
+      // Remove excess image IDs
+      const idsToKeep = imageIds.slice(0, remainingPlaceholders);
+      const newImageDataMap = new Map();
+      idsToKeep.forEach((id) => {
+        if (imageDataMap.has(id)) {
+          newImageDataMap.set(id, imageDataMap.get(id)!);
+        }
+      });
+      setImageDataMap(newImageDataMap);
+
+      // Rebuild actual prompt with only kept IDs
+      newActualPrompt = newDisplayValue;
+      let index = 0;
+      newActualPrompt = newDisplayValue.replace(placeholderRegex, () => {
+        if (index < idsToKeep.length) {
+          return `@"${idsToKeep[index++]}"`;
+        }
+        return "📷 [Image]";
+      });
+    }
+
+    setPrompt(newActualPrompt);
+
     // Check if / was just typed at the beginning of input or after whitespace
     if (
-      newValue.length > prompt.length &&
-      newValue[newCursorPosition - 1] === "/"
+      newDisplayValue.length > displayPrompt.length &&
+      newDisplayValue[newCursorPosition - 1] === "/"
     ) {
       // Check if it's at the start or after whitespace
       const isStartOfCommand =
         newCursorPosition === 1 ||
-        (newCursorPosition > 1 && /\s/.test(newValue[newCursorPosition - 2]));
+        (newCursorPosition > 1 &&
+          /\s/.test(newDisplayValue[newCursorPosition - 2]));
 
       if (isStartOfCommand) {
         console.log("[FloatingPromptInput] / detected for slash command");
@@ -494,8 +785,8 @@ const FloatingPromptInputInner = (
     // Check if @ was just typed
     if (
       projectPath?.trim() &&
-      newValue.length > prompt.length &&
-      newValue[newCursorPosition - 1] === "@"
+      newDisplayValue.length > displayPrompt.length &&
+      newDisplayValue[newCursorPosition - 1] === "@"
     ) {
       console.log(
         "[FloatingPromptInput] @ detected, projectPath:",
@@ -511,18 +802,21 @@ const FloatingPromptInputInner = (
       // Find the / position before cursor
       let slashPosition = -1;
       for (let i = newCursorPosition - 1; i >= 0; i--) {
-        if (newValue[i] === "/") {
+        if (newDisplayValue[i] === "/") {
           slashPosition = i;
           break;
         }
         // Stop if we hit whitespace (new word)
-        if (newValue[i] === " " || newValue[i] === "\n") {
+        if (newDisplayValue[i] === " " || newDisplayValue[i] === "\n") {
           break;
         }
       }
 
       if (slashPosition !== -1) {
-        const query = newValue.substring(slashPosition + 1, newCursorPosition);
+        const query = newDisplayValue.substring(
+          slashPosition + 1,
+          newCursorPosition
+        );
         setSlashCommandQuery(query);
       } else {
         // / was removed or cursor moved away
@@ -536,18 +830,21 @@ const FloatingPromptInputInner = (
       // Find the @ position before cursor
       let atPosition = -1;
       for (let i = newCursorPosition - 1; i >= 0; i--) {
-        if (newValue[i] === "@") {
+        if (newDisplayValue[i] === "@") {
           atPosition = i;
           break;
         }
         // Stop if we hit whitespace (new word)
-        if (newValue[i] === " " || newValue[i] === "\n") {
+        if (newDisplayValue[i] === " " || newDisplayValue[i] === "\n") {
           break;
         }
       }
 
       if (atPosition !== -1) {
-        const query = newValue.substring(atPosition + 1, newCursorPosition);
+        const query = newDisplayValue.substring(
+          atPosition + 1,
+          newCursorPosition
+        );
         setFilePickerQuery(query);
       } else {
         // @ was removed or cursor moved away
@@ -556,21 +853,23 @@ const FloatingPromptInputInner = (
       }
     }
 
-    setPrompt(newValue);
     setCursorPosition(newCursorPosition);
+
+    // Debug state after changes
+    setTimeout(() => debugCurrentState("handleTextChange-END"), 0);
   };
 
   const handleFileSelect = (entry: FileEntry) => {
     if (textareaRef.current) {
-      // Find the @ position before cursor
+      // Find the @ position before cursor in display prompt
       let atPosition = -1;
       for (let i = cursorPosition - 1; i >= 0; i--) {
-        if (prompt[i] === "@") {
+        if (displayPrompt[i] === "@") {
           atPosition = i;
           break;
         }
         // Stop if we hit whitespace (new word)
-        if (prompt[i] === " " || prompt[i] === "\n") {
+        if (displayPrompt[i] === " " || displayPrompt[i] === "\n") {
           break;
         }
       }
@@ -583,14 +882,19 @@ const FloatingPromptInputInner = (
 
       // Replace the @ and partial query with the selected path (file or directory)
       const textarea = textareaRef.current;
-      const beforeAt = prompt.substring(0, atPosition);
-      const afterCursor = prompt.substring(cursorPosition);
+      const beforeAt = displayPrompt.substring(0, atPosition);
+      const afterCursor = displayPrompt.substring(cursorPosition);
       const relativePath = entry.path.startsWith(projectPath || "")
         ? entry.path.slice((projectPath || "").length + 1)
         : entry.path;
 
-      const newPrompt = `${beforeAt}@${relativePath} ${afterCursor}`;
-      setPrompt(newPrompt);
+      const newDisplayPrompt = `${beforeAt}@${relativePath} ${afterCursor}`;
+      setDisplayPrompt(newDisplayPrompt);
+
+      // Also update actual prompt
+      const newActualPrompt = newDisplayPrompt; // For file paths, display and actual are the same
+      setPrompt(newActualPrompt);
+
       setShowFilePicker(false);
       setFilePickerQuery("");
 
@@ -618,15 +922,15 @@ const FloatingPromptInputInner = (
       : textareaRef.current;
     if (!textarea) return;
 
-    // Find the / position before cursor
+    // Find the / position before cursor in display prompt
     let slashPosition = -1;
     for (let i = cursorPosition - 1; i >= 0; i--) {
-      if (prompt[i] === "/") {
+      if (displayPrompt[i] === "/") {
         slashPosition = i;
         break;
       }
       // Stop if we hit whitespace (new word)
-      if (prompt[i] === " " || prompt[i] === "\n") {
+      if (displayPrompt[i] === " " || displayPrompt[i] === "\n") {
         break;
       }
     }
@@ -637,13 +941,14 @@ const FloatingPromptInputInner = (
     }
 
     // Simply insert the command syntax
-    const beforeSlash = prompt.substring(0, slashPosition);
-    const afterCursor = prompt.substring(cursorPosition);
+    const beforeSlash = displayPrompt.substring(0, slashPosition);
+    const afterCursor = displayPrompt.substring(cursorPosition);
 
     if (command.accepts_arguments) {
       // Insert command with placeholder for arguments
-      const newPrompt = `${beforeSlash}${command.full_command} `;
-      setPrompt(newPrompt);
+      const newDisplayPrompt = `${beforeSlash}${command.full_command} `;
+      setDisplayPrompt(newDisplayPrompt);
+      setPrompt(newDisplayPrompt); // For slash commands, display and actual are the same
       setShowSlashCommandPicker(false);
       setSlashCommandQuery("");
 
@@ -656,8 +961,9 @@ const FloatingPromptInputInner = (
       }, 0);
     } else {
       // Insert command and close picker
-      const newPrompt = `${beforeSlash}${command.full_command} ${afterCursor}`;
-      setPrompt(newPrompt);
+      const newDisplayPrompt = `${beforeSlash}${command.full_command} ${afterCursor}`;
+      setDisplayPrompt(newDisplayPrompt);
+      setPrompt(newDisplayPrompt); // For slash commands, display and actual are the same
       setShowSlashCommandPicker(false);
       setSlashCommandQuery("");
 
@@ -717,21 +1023,40 @@ const FloatingPromptInputInner = (
     for (const item of items) {
       if (item.type.startsWith("image/")) {
         e.preventDefault();
+        console.log("[handlePaste] Image detected, processing...");
 
         // Get the image blob
         const blob = item.getAsFile();
         if (!blob) continue;
 
         try {
-          // Convert blob to base64
+          // Generate a unique ID for this image instead of using the full base64
+          const imageId = generateImageId();
+          console.log("[handlePaste] Generated image ID:", imageId);
+
+          // Convert blob to base64 asynchronously
           const reader = new FileReader();
           reader.onload = () => {
             const base64Data = reader.result as string;
+            console.log(
+              "[handlePaste] Base64 conversion complete, length:",
+              base64Data.length
+            );
 
-            // Add the base64 data URL directly to the prompt
+            // Store the base64 data in our map
+            setImageDataMap((prev) => {
+              const newMap = new Map(prev);
+              newMap.set(imageId, base64Data);
+              console.log(
+                "[handlePaste] Added to imageDataMap, new size:",
+                newMap.size
+              );
+              return newMap;
+            });
+
+            // Add only the short ID to the prompt for better performance
             setPrompt((currentPrompt) => {
-              // Use the data URL directly as the image reference
-              const mention = `@"${base64Data}"`;
+              const mention = `@"${imageId}"`;
               const newPrompt =
                 currentPrompt +
                 (currentPrompt.endsWith(" ") || currentPrompt === ""
@@ -739,6 +1064,30 @@ const FloatingPromptInputInner = (
                   : " ") +
                 mention +
                 " ";
+
+              console.log(
+                "[handlePaste] Updated prompt, new length:",
+                newPrompt.length
+              );
+              console.log("[handlePaste] Added mention:", mention);
+
+              // Also update display prompt with user-friendly placeholder
+              setDisplayPrompt((currentDisplayPrompt) => {
+                const displayMention = `📷 [Image]`;
+                const newDisplayPrompt =
+                  currentDisplayPrompt +
+                  (currentDisplayPrompt.endsWith(" ") ||
+                  currentDisplayPrompt === ""
+                    ? ""
+                    : " ") +
+                  displayMention +
+                  " ";
+                console.log(
+                  "[handlePaste] Updated display prompt, new length:",
+                  newDisplayPrompt.length
+                );
+                return newDisplayPrompt;
+              });
 
               // Focus the textarea and move cursor to end
               setTimeout(() => {
@@ -779,7 +1128,33 @@ const FloatingPromptInputInner = (
     // Remove the corresponding @mention from the prompt
     const imagePath = embeddedImages[index];
 
-    // For data URLs, we need to handle them specially since they're always quoted
+    // Find the corresponding image ID in the prompt if this is a base64 image
+    let imageIdToRemove: string | null = null;
+
+    // Check if this image path is a base64 that came from an image ID
+    for (const [imageId, imageData] of imageDataMap.entries()) {
+      if (imageData === imagePath) {
+        imageIdToRemove = imageId;
+        break;
+      }
+    }
+
+    if (imageIdToRemove) {
+      // Remove the image ID from the prompt
+      const quotedPath = `@"${imageIdToRemove}"`;
+      const newPrompt = prompt.replace(quotedPath, "").trim();
+      setPrompt(newPrompt);
+
+      // Clean up the image data map
+      setImageDataMap((prev) => {
+        const newMap = new Map(prev);
+        newMap.delete(imageIdToRemove!);
+        return newMap;
+      });
+      return;
+    }
+
+    // For data URLs pasted directly, we need to handle them specially since they're always quoted
     if (imagePath.startsWith("data:")) {
       // Simply remove the exact quoted data URL
       const quotedPath = `@"${imagePath}"`;
@@ -859,11 +1234,11 @@ const FloatingPromptInputInner = (
 
               <Textarea
                 ref={expandedTextareaRef}
-                value={prompt}
+                value={displayPrompt}
                 onChange={handleTextChange}
                 onPaste={handlePaste}
                 placeholder="Type your prompt here..."
-                className="min-h-[200px] resize-none"
+                className="min-h-[400px] max-h-[800px] resize-none overflow-auto"
                 disabled={disabled}
                 onDragEnter={handleDrag}
                 onDragLeave={handleDrag}
@@ -973,7 +1348,7 @@ const FloatingPromptInputInner = (
 
                 <Button
                   onClick={handleSend}
-                  disabled={!prompt.trim() || disabled}
+                  disabled={!displayPrompt.trim() || disabled}
                   size="default"
                   className="min-w-[60px]"
                 >
@@ -1137,7 +1512,7 @@ const FloatingPromptInputInner = (
               {/* Send/Stop Button */}
               <Button
                 onClick={isLoading ? onCancel : handleSend}
-                disabled={isLoading ? false : !prompt.trim() || disabled}
+                disabled={isLoading ? false : !displayPrompt.trim() || disabled}
                 variant={isLoading ? "destructive" : "default"}
                 size="default"
                 className="min-w-[60px] flex-1"
@@ -1158,7 +1533,7 @@ const FloatingPromptInputInner = (
               <div className="flex-1 relative">
                 <Textarea
                   ref={textareaRef}
-                  value={prompt}
+                  value={displayPrompt}
                   onChange={handleTextChange}
                   onKeyDown={handleKeyDown}
                   onPaste={handlePaste}
@@ -1169,7 +1544,7 @@ const FloatingPromptInputInner = (
                   }
                   disabled={disabled}
                   className={cn(
-                    "min-h-[44px] max-h-[120px] resize-none pr-10 overflow-hidden",
+                    "min-h-[44px] max-h-[120px] resize-none pr-10 overflow-auto",
                     dragActive && "border-primary"
                   )}
                   rows={1}
