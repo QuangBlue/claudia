@@ -1,6 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Circle, FileText, Settings, ExternalLink, BarChart3, Network, Info } from "lucide-react";
+import {
+  Circle,
+  FileText,
+  Settings,
+  ExternalLink,
+  BarChart3,
+  Network,
+  Info,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover } from "@/components/ui/popover";
 import { ThemeSelector } from "@/components/ThemeSelector";
@@ -36,7 +44,7 @@ interface TopbarProps {
 
 /**
  * Topbar component with status indicator and navigation buttons
- * 
+ *
  * @example
  * <Topbar
  *   onClaudeClick={() => setView('editor')}
@@ -53,24 +61,28 @@ export const Topbar: React.FC<TopbarProps> = ({
   onInfoClick,
   className,
 }) => {
-  const [versionStatus, setVersionStatus] = useState<ClaudeVersionStatus | null>(null);
+  const [versionStatus, setVersionStatus] =
+    useState<ClaudeVersionStatus | null>(null);
   const [checking, setChecking] = useState(true);
-  
+
   // Check Claude version on mount
   useEffect(() => {
     checkVersion();
   }, []);
-  
+
   const checkVersion = async () => {
     try {
       setChecking(true);
       const status = await api.checkClaudeVersion();
       setVersionStatus(status);
-      
+
       // If Claude is not installed and the error indicates it wasn't found
-      if (!status.is_installed && status.output.includes("No such file or directory")) {
+      if (
+        !status.is_installed &&
+        status.output.includes("No such file or directory")
+      ) {
         // Emit an event that can be caught by the parent
-        window.dispatchEvent(new CustomEvent('claude-not-found'));
+        window.dispatchEvent(new CustomEvent("claude-not-found"));
       }
     } catch (err) {
       console.error("Failed to check Claude version:", err);
@@ -82,19 +94,22 @@ export const Topbar: React.FC<TopbarProps> = ({
       setChecking(false);
     }
   };
-  
+
   const StatusIndicator = () => {
     if (checking) {
       return (
         <div className="flex items-center space-x-2 text-xs">
           <Circle className="h-3 w-3 animate-pulse text-muted-foreground" />
-          <span className="text-muted-foreground">Checking...</span>
+          <span className="text-muted-foreground hidden sm:inline">
+            Checking...
+          </span>
+          <span className="text-muted-foreground sm:hidden">...</span>
         </div>
       );
     }
-    
+
     if (!versionStatus) return null;
-    
+
     const statusContent = (
       <Button
         variant="ghost"
@@ -106,20 +121,25 @@ export const Topbar: React.FC<TopbarProps> = ({
           <Circle
             className={cn(
               "h-3 w-3",
-              versionStatus.is_installed 
-                ? "fill-green-500 text-green-500" 
+              versionStatus.is_installed
+                ? "fill-green-500 text-green-500"
                 : "fill-red-500 text-red-500"
             )}
           />
-          <span>
+          <span className="hidden sm:inline">
             {versionStatus.is_installed && versionStatus.version
               ? `Claude Code v${versionStatus.version}`
               : "Claude Code"}
           </span>
+          <span className="sm:hidden">
+            {versionStatus.is_installed && versionStatus.version
+              ? `v${versionStatus.version}`
+              : "Claude"}
+          </span>
         </div>
       </Button>
     );
-    
+
     if (!versionStatus.is_installed) {
       return (
         <Popover
@@ -155,65 +175,69 @@ export const Topbar: React.FC<TopbarProps> = ({
         />
       );
     }
-    
+
     return statusContent;
   };
-  
+
   return (
     <motion.div
       initial={{ opacity: 0, y: -20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
       className={cn(
-        "flex items-center justify-between px-4 py-3 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
+        "flex items-center justify-between px-2 sm:px-4 py-2 sm:py-3 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
         className
       )}
     >
       {/* Status Indicator */}
       <StatusIndicator />
-      
+
       {/* Action Buttons */}
-      <div className="flex items-center space-x-2">
+      <div className="flex items-center space-x-1 sm:space-x-2">
         <Button
           variant="ghost"
           size="sm"
           onClick={onUsageClick}
-          className="text-xs"
+          className="text-xs h-8 px-2 sm:px-3"
+          title="Usage Dashboard"
         >
-          <BarChart3 className="mr-2 h-3 w-3" />
-          Usage Dashboard
+          <BarChart3 className="h-3 w-3 sm:mr-2" />
+          <span className="hidden sm:inline">Usage Dashboard</span>
         </Button>
-        
+
         <Button
           variant="ghost"
           size="sm"
           onClick={onClaudeClick}
-          className="text-xs"
+          className="text-xs h-8 px-2 sm:px-3"
+          title="CLAUDE.md"
         >
-          <FileText className="mr-2 h-3 w-3" />
-          CLAUDE.md
+          <FileText className="h-3 w-3 sm:mr-2" />
+          <span className="hidden sm:inline">CLAUDE.md</span>
         </Button>
-        
+
         <Button
           variant="ghost"
           size="sm"
           onClick={onMCPClick}
-          className="text-xs"
+          className="text-xs h-8 px-2 sm:px-3"
+          title="MCP"
         >
-          <Network className="mr-2 h-3 w-3" />
-          MCP
+          <Network className="h-3 w-3 sm:mr-2" />
+          <span className="hidden sm:inline">MCP</span>
         </Button>
-        
+
         <Button
           variant="ghost"
           size="sm"
           onClick={onSettingsClick}
-          className="text-xs"
+          className="text-xs h-8 px-2 sm:px-3"
+          title="Settings"
         >
-          <Settings className="mr-2 h-3 w-3" />
-          Settings
+          <Settings className="h-3 w-3 sm:mr-2" />
+          <span className="hidden sm:inline">Settings</span>
         </Button>
-        
+
         <Button
           variant="ghost"
           size="icon"
@@ -223,9 +247,9 @@ export const Topbar: React.FC<TopbarProps> = ({
         >
           <Info className="h-4 w-4" />
         </Button>
-        
+
         <ThemeSelector />
       </div>
     </motion.div>
   );
-}; 
+};
