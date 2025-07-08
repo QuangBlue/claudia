@@ -31,20 +31,20 @@
 /* Dark theme overrides */
 .dark {
   /* Colors */
-  --color-background: oklch(0.18 0.01 240);
-  --color-foreground: oklch(0.92 0.01 240);
-  --color-card: oklch(0.22 0.01 240);
-  --color-card-foreground: oklch(0.92 0.01 240);
+  --color-background: #21222c;
+  --color-foreground: #f8f8f2;
+  --color-card: #282a36;
+  --color-card-foreground: #f8f8f2;
   --color-popover: oklch(0.18 0.01 240);
-  --color-popover-foreground: oklch(0.92 0.01 240);
-  --color-primary: oklch(0.92 0.01 240);
-  --color-primary-foreground: oklch(0.22 0.01 240);
+  --color-popover-foreground: #f8f8f2;
+  --color-primary: #f8f8f2;
+  --color-primary-foreground: #282a36;
   --color-secondary: oklch(0.24 0.01 240);
-  --color-secondary-foreground: oklch(0.92 0.01 240);
+  --color-secondary-foreground: #f8f8f2;
   --color-muted: oklch(0.24 0.01 240);
   --color-muted-foreground: oklch(0.65 0.01 240);
   --color-accent: oklch(0.24 0.01 240);
-  --color-accent-foreground: oklch(0.92 0.01 240);
+  --color-accent-foreground: #f8f8f2;
   --color-destructive: oklch(0.6 0.2 25);
   --color-destructive-foreground: oklch(0.98 0.01 240);
   --color-border: oklch(0.26 0.01 240);

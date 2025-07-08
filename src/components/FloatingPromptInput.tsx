@@ -1594,16 +1594,74 @@ const FloatingPromptInputInner = (
         onDrop={handleDrop}
       >
         <div className="max-w-5xl mx-auto">
-          {/* Image previews */}
-          {embeddedImages.length > 0 && (
-            <ImagePreview
-              images={embeddedImages}
-              onRemove={handleRemoveImage}
-              className="border-b border-border"
-            />
-          )}
+          <div className="pl-4 pr-4 pt-2 pb-2">
+            {/* Image previews */}
+            {embeddedImages.length > 0 && (
+              <ImagePreview
+                images={embeddedImages}
+                onRemove={handleRemoveImage}
+                className="border-b border-border"
+              />
+            )}
+            <div className="mb-2">
+              {/* Prompt Input */}
+              <div className="flex-1 relative">
+                <Textarea
+                  ref={textareaRef}
+                  value={displayPrompt}
+                  onChange={handleTextChange}
+                  onKeyDown={handleKeyDown}
+                  onPaste={handlePaste}
+                  placeholder={
+                    dragActive ? "Drop files here..." : "Ask Claude anything..."
+                  }
+                  disabled={disabled}
+                  className={cn(
+                    "min-h-[100px] max-h-[300px] resize-none pr-10 overflow-auto"
+                  )}
+                  rows={1}
+                  style={{
+                    backgroundColor: "var(--color-card)",
+                    border:
+                      "1px solid color-mix(in srgb, var(--color-foreground) 12%, transparent)",
+                  }}
+                />
 
-          <div className="p-4">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setIsExpanded(true)}
+                  disabled={disabled}
+                  className="absolute right-1 bottom-1 h-8 w-8"
+                >
+                  <Maximize2 className="h-4 w-4" />
+                </Button>
+
+                {/* File Picker */}
+                <AnimatePresence>
+                  {showFilePicker && projectPath && projectPath.trim() && (
+                    <FilePicker
+                      basePath={projectPath.trim()}
+                      onSelect={handleFileSelect}
+                      onClose={handleFilePickerClose}
+                      initialQuery={filePickerQuery}
+                    />
+                  )}
+                </AnimatePresence>
+
+                {/* Slash Command Picker */}
+                <AnimatePresence>
+                  {showSlashCommandPicker && (
+                    <SlashCommandPicker
+                      projectPath={projectPath}
+                      onSelect={handleSlashCommandSelect}
+                      onClose={handleSlashCommandPickerClose}
+                      initialQuery={slashCommandQuery}
+                    />
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
             <div className="flex items-end gap-3">
               {/* Model Picker */}
               <Popover
@@ -1726,13 +1784,14 @@ const FloatingPromptInputInner = (
                 align="start"
                 side="top"
               />
+              <div className="flex-1" />
               {/* Send/Stop Button */}
               <Button
                 onClick={isLoading ? onCancel : handleSend}
                 disabled={isLoading ? false : !displayPrompt.trim() || disabled}
                 variant={isLoading ? "destructive" : "default"}
-                size="default"
-                className="min-w-[60px] flex-1"
+                size="sm"
+                className="min-w-[60px] shrink-0"
               >
                 {isLoading ? (
                   <>
@@ -1743,63 +1802,6 @@ const FloatingPromptInputInner = (
                   <Send className="h-4 w-4" />
                 )}
               </Button>
-            </div>
-
-            <div className="mt-2">
-              {/* Prompt Input */}
-              <div className="flex-1 relative">
-                <Textarea
-                  ref={textareaRef}
-                  value={displayPrompt}
-                  onChange={handleTextChange}
-                  onKeyDown={handleKeyDown}
-                  onPaste={handlePaste}
-                  placeholder={
-                    dragActive ? "Drop files here..." : "Ask Claude anything..."
-                  }
-                  disabled={disabled}
-                  className={cn(
-                    "min-h-[44px] max-h-[120px] resize-none pr-10 overflow-auto",
-                    dragActive && "border-primary"
-                  )}
-                  rows={1}
-                  style={{ height: "44px" }}
-                />
-
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setIsExpanded(true)}
-                  disabled={disabled}
-                  className="absolute right-1 bottom-1 h-8 w-8"
-                >
-                  <Maximize2 className="h-4 w-4" />
-                </Button>
-
-                {/* File Picker */}
-                <AnimatePresence>
-                  {showFilePicker && projectPath && projectPath.trim() && (
-                    <FilePicker
-                      basePath={projectPath.trim()}
-                      onSelect={handleFileSelect}
-                      onClose={handleFilePickerClose}
-                      initialQuery={filePickerQuery}
-                    />
-                  )}
-                </AnimatePresence>
-
-                {/* Slash Command Picker */}
-                <AnimatePresence>
-                  {showSlashCommandPicker && (
-                    <SlashCommandPicker
-                      projectPath={projectPath}
-                      onSelect={handleSlashCommandSelect}
-                      onClose={handleSlashCommandPickerClose}
-                      initialQuery={slashCommandQuery}
-                    />
-                  )}
-                </AnimatePresence>
-              </div>
             </div>
 
             <div className="mt-2 text-xs text-muted-foreground">

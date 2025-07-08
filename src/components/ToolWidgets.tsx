@@ -51,7 +51,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { claudeSyntaxTheme } from "@/lib/claudeSyntaxTheme";
+import { getClaudeSyntaxThemeAuto } from "@/lib/claudeSyntaxTheme";
 import { Button } from "@/components/ui/button";
 import { createPortal } from "react-dom";
 import * as Diff from "diff";
@@ -543,7 +543,12 @@ export const ReadResultWidget: React.FC<{
 
   return (
     <div className="rounded-lg overflow-hidden border bg-zinc-950 w-full">
-      <div className="px-4 py-2 border-b bg-zinc-900/50 flex items-center justify-between">
+      <div
+        className="px-4 py-2 border-b  flex items-center justify-between"
+        style={{
+          backgroundColor: "var(--color-background)",
+        }}
+      >
         <div className="flex items-center gap-2">
           <FileText className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="text-xs font-mono text-muted-foreground">
@@ -575,13 +580,14 @@ export const ReadResultWidget: React.FC<{
         <div className="relative overflow-x-auto">
           <SyntaxHighlighter
             language={language}
-            style={claudeSyntaxTheme}
+            style={getClaudeSyntaxThemeAuto()}
             showLineNumbers
             startingLineNumber={startLineNumber}
             wrapLongLines={false}
             customStyle={{
               margin: 0,
-              background: "transparent",
+              background: "var(--color-secondary)",
+
               lineHeight: "1.6",
             }}
             codeTagProps={{
@@ -843,7 +849,7 @@ export const WriteWidget: React.FC<{
           <div className="flex-1 overflow-auto">
             <SyntaxHighlighter
               language={language}
-              style={claudeSyntaxTheme}
+              style={getClaudeSyntaxThemeAuto()}
               customStyle={{
                 margin: 0,
                 padding: "1.5rem",
@@ -900,7 +906,7 @@ export const WriteWidget: React.FC<{
       <div className="overflow-auto flex-1">
         <SyntaxHighlighter
           language={language}
-          style={claudeSyntaxTheme}
+          style={getClaudeSyntaxThemeAuto()}
           customStyle={{
             margin: 0,
             padding: "1rem",
@@ -1260,7 +1266,7 @@ export const EditWidget: React.FC<{
                 <div className="flex-1">
                   <SyntaxHighlighter
                     language={language}
-                    style={claudeSyntaxTheme}
+                    style={getClaudeSyntaxThemeAuto()}
                     PreTag="div"
                     wrapLongLines={false}
                     customStyle={{
@@ -1346,7 +1352,7 @@ export const EditResultWidget: React.FC<{ content: string }> = ({
       <div className="overflow-x-auto max-h-[440px]">
         <SyntaxHighlighter
           language={language}
-          style={claudeSyntaxTheme}
+          style={getClaudeSyntaxThemeAuto()}
           showLineNumbers
           startingLineNumber={startLineNumber}
           wrapLongLines={false}
@@ -1507,7 +1513,7 @@ export const MCPWidget: React.FC<{
                 >
                   <SyntaxHighlighter
                     language="json"
-                    style={claudeSyntaxTheme}
+                    style={getClaudeSyntaxThemeAuto()}
                     customStyle={{
                       margin: 0,
                       padding: "0.75rem",
@@ -1796,7 +1802,7 @@ export const MultiEditWidget: React.FC<{
                               <div className="flex-1">
                                 <SyntaxHighlighter
                                   language={language}
-                                  style={claudeSyntaxTheme}
+                                  style={getClaudeSyntaxThemeAuto()}
                                   PreTag="div"
                                   wrapLongLines={false}
                                   customStyle={{
