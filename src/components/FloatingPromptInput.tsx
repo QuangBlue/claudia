@@ -695,15 +695,15 @@ const FloatingPromptInputInner = (
             console.log("[DRAG DEBUG] Raw paths:", droppedPaths);
             console.log("[DRAG DEBUG] Event payload:", event.payload);
 
-            // Check if this might be a VSCode drag (no paths provided)
+            // Check if this might be a VSCode/Cursor drag (no paths provided)
             if (droppedPaths.length === 0) {
               console.log(
-                "[DRAG DEBUG] No paths provided - likely VSCode drag"
+                "[DRAG DEBUG] No paths provided - likely VSCode/Cursor drag"
               );
 
               // Show a helpful message to user
               console.warn(
-                "[DRAG] VSCode drag detected: VSCode doesn't provide file paths in drag & drop. Please use @ to mention files or drag from Finder instead."
+                "[DRAG] VSCode/Cursor drag detected: Code editors don't provide file paths in drag & drop. Please use @ to mention files, copy file path and paste, or drag from Finder/Explorer instead."
               );
 
               // Show toast notification
@@ -729,36 +729,143 @@ const FloatingPromptInputInner = (
                 // Handle different path formats
                 let normalizedPath = path;
 
+                console.log("[DRAG DEBUG] Processing path:", normalizedPath);
+
                 // Remove file:// URI scheme if present
                 if (normalizedPath.startsWith("file://")) {
                   normalizedPath = decodeURIComponent(
                     normalizedPath.replace("file://", "")
                   );
-                }
-
-                // Handle VSCode specific URIs
-                if (normalizedPath.includes("vscode://")) {
                   console.log(
-                    "[DRAG DEBUG] VSCode URI detected:",
+                    "[DRAG DEBUG] After file:// removal:",
                     normalizedPath
                   );
-                  // VSCode URIs need special handling - might not be droppable files
-                  return null;
                 }
 
-                // Ensure absolute path
-                if (!normalizedPath.startsWith("/") && projectPath) {
-                  normalizedPath = `${projectPath}/${normalizedPath}`;
+                // Handle VSCode/Cursor specific URIs
+                if (
+                  normalizedPath.includes("vscode://") ||
+                  normalizedPath.includes("vscode-file://")
+                ) {
+                  console.log(
+                    "[DRAG DEBUG] VSCode/Cursor URI detected:",
+                    normalizedPath
+                  );
+
+                  // Try to extract file path from VSCode URIs
+                  if (normalizedPath.includes("vscode-file://")) {
+                    normalizedPath = normalizedPath.replace(
+                      "vscode-file://",
+                      ""
+                    );
+                    normalizedPath = decodeURIComponent(normalizedPath);
+                    console.log(
+                      "[DRAG DEBUG] After vscode-file:// processing:",
+                      normalizedPath
+                    );
+                  } else {
+                    // For other vscode:// URIs, we can't extract file paths
+                    return null;
+                  }
                 }
 
-                console.log("[DRAG DEBUG] Path normalization:", {
+                // Handle tilde paths (~/...)
+                if (normalizedPath.startsWith("~/")) {
+                  // Replace ~ with user home directory
+                  const homeDir = process.env.HOME || process.env.USERPROFILE;
+                  if (homeDir) {
+                    normalizedPath = normalizedPath.replace("~", homeDir);
+                    console.log(
+                      "[DRAG DEBUG] After tilde expansion:",
+                      normalizedPath
+                    );
+                  }
+                }
+
+                // Handle relative paths that might be from text editors
+                if (
+                  !normalizedPath.startsWith("/") &&
+                  !normalizedPath.includes(":")
+                ) {
+                  // If we have a project path and this looks like a relative path from the project
+                  if (projectPath) {
+                    normalizedPath = `${projectPath}/${normalizedPath}`;
+                    console.log(
+                      "[DRAG DEBUG] After relative path resolution:",
+                      normalizedPath
+                    );
+                  }
+                }
+
+                // Additional check for paths that might be malformed
+                if (normalizedPath.length === 0 || normalizedPath === path) {
+                  // If path hasn't been processed or is empty, it might be from an unsupported source
+                  if (
+                    !path.startsWith("/") &&
+                    !path.startsWith("~") &&
+                    !path.includes("://")
+                  ) {
+                    console.log(
+                      "[DRAG DEBUG] Potentially unsupported path format:",
+                      path
+                    );
+
+                    // Try to interpret as text that might contain file paths
+                    const potentialPaths = path
+                      .split(/\s+/)
+                      .filter(
+                        (p) =>
+                          p.includes("/") &&
+                          (p.endsWith(".tsx") ||
+                            p.endsWith(".ts") ||
+                            p.endsWith(".js") ||
+                            p.endsWith(".jsx") ||
+                            p.endsWith(".vue") ||
+                            p.endsWith(".py") ||
+                            p.endsWith(".java") ||
+                            p.endsWith(".cpp") ||
+                            p.endsWith(".c") ||
+                            p.endsWith(".md") ||
+                            p.endsWith(".txt") ||
+                            p.endsWith(".json") ||
+                            p.endsWith(".css") ||
+                            p.endsWith(".scss") ||
+                            p.endsWith(".html"))
+                      );
+
+                    if (potentialPaths.length > 0) {
+                      // Use the first potential file path found
+                      normalizedPath = potentialPaths[0];
+                      console.log(
+                        "[DRAG DEBUG] Extracted potential file path:",
+                        normalizedPath
+                      );
+
+                      // Apply tilde expansion if needed
+                      if (normalizedPath.startsWith("~/")) {
+                        const homeDir =
+                          process.env.HOME || process.env.USERPROFILE;
+                        if (homeDir) {
+                          normalizedPath = normalizedPath.replace("~", homeDir);
+                        }
+                      }
+
+                      // Apply relative path resolution if needed
+                      if (!normalizedPath.startsWith("/") && projectPath) {
+                        normalizedPath = `${projectPath}/${normalizedPath}`;
+                      }
+                    }
+                  }
+                }
+
+                console.log("[DRAG DEBUG] Final path normalization:", {
                   original: path,
                   normalized: normalizedPath,
                 });
 
-                return normalizedPath;
+                return normalizedPath || null;
               })
-              .filter((path) => path !== null) as string[];
+              .filter((path) => path !== null && path.length > 0) as string[];
 
             if (filePaths.length > 0) {
               console.log("[DRAG DEBUG] Processing file paths...");
@@ -1002,6 +1109,65 @@ const FloatingPromptInputInner = (
       setCursorPosition(newCursorPosition);
     }
 
+    // Auto-detect potential file paths and suggest @mention conversion
+    if (projectPath?.trim() && newDisplayValue !== displayPrompt) {
+      const words = newDisplayValue.split(/\s+/);
+      const lastWord = words[words.length - 1];
+
+      // Check if the last word looks like a file path but isn't already a @mention
+      if (
+        lastWord &&
+        !lastWord.startsWith("@") &&
+        lastWord.includes("/") &&
+        (lastWord.endsWith(".tsx") ||
+          lastWord.endsWith(".ts") ||
+          lastWord.endsWith(".js") ||
+          lastWord.endsWith(".jsx") ||
+          lastWord.endsWith(".vue") ||
+          lastWord.endsWith(".py") ||
+          lastWord.endsWith(".java") ||
+          lastWord.endsWith(".cpp") ||
+          lastWord.endsWith(".c") ||
+          lastWord.endsWith(".md") ||
+          lastWord.endsWith(".txt") ||
+          lastWord.endsWith(".json") ||
+          lastWord.endsWith(".css") ||
+          lastWord.endsWith(".scss") ||
+          lastWord.endsWith(".html"))
+      ) {
+        console.log(
+          "[FloatingPromptInput] Potential file path detected:",
+          lastWord
+        );
+
+        // Convert to @mention automatically
+        const wordsExceptLast = words.slice(0, -1);
+        const mention = lastWord.includes(" ")
+          ? `@"${lastWord}"`
+          : `@${lastWord}`;
+        const newValue = [...wordsExceptLast, mention].join(" ");
+
+        if (newValue !== newDisplayValue) {
+          console.log(
+            "[FloatingPromptInput] Auto-converting to @mention:",
+            mention
+          );
+          setDisplayPrompt(newValue + " ");
+          setPrompt(newValue + " ");
+
+          // Move cursor to end
+          setTimeout(() => {
+            const target = isExpanded
+              ? expandedTextareaRef.current
+              : textareaRef.current;
+            target?.focus();
+            target?.setSelectionRange(newValue.length + 1, newValue.length + 1);
+          }, 0);
+          return; // Skip further processing since we modified the value
+        }
+      }
+    }
+
     // Check if we're typing after / (for slash command search)
     if (showSlashCommandPicker && newCursorPosition >= cursorPosition) {
       // Find the / position before cursor
@@ -1225,6 +1391,112 @@ const FloatingPromptInputInner = (
     const items = e.clipboardData?.items;
     if (!items) return;
 
+    // First check for text that might contain file paths
+    const textData = e.clipboardData?.getData("text/plain");
+    if (textData && textData.trim()) {
+      console.log("[handlePaste] Text data detected:", textData);
+
+      // Check if the text looks like file paths
+      const lines = textData
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+      const filePaths: string[] = [];
+
+      for (const line of lines) {
+        // Check if this looks like a file path from Cursor/VSCode
+        if (
+          line.includes("/") &&
+          (line.endsWith(".tsx") ||
+            line.endsWith(".ts") ||
+            line.endsWith(".js") ||
+            line.endsWith(".jsx") ||
+            line.endsWith(".vue") ||
+            line.endsWith(".py") ||
+            line.endsWith(".java") ||
+            line.endsWith(".cpp") ||
+            line.endsWith(".c") ||
+            line.endsWith(".md") ||
+            line.endsWith(".txt") ||
+            line.endsWith(".json") ||
+            line.endsWith(".css") ||
+            line.endsWith(".scss") ||
+            line.endsWith(".html") ||
+            line.endsWith(".php") ||
+            line.endsWith(".rb") ||
+            line.endsWith(".go") ||
+            line.endsWith(".rs") ||
+            line.endsWith(".kt") ||
+            line.endsWith(".swift") ||
+            line.endsWith(".xml") ||
+            line.endsWith(".yml") ||
+            line.endsWith(".yaml") ||
+            line.endsWith(".toml") ||
+            line.endsWith(".ini") ||
+            line.endsWith(".conf"))
+        ) {
+          let normalizedPath = line;
+
+          // Handle tilde paths
+          if (normalizedPath.startsWith("~/")) {
+            const homeDir = process.env.HOME || process.env.USERPROFILE;
+            if (homeDir) {
+              normalizedPath = normalizedPath.replace("~", homeDir);
+            }
+          }
+
+          // Handle relative paths
+          if (!normalizedPath.startsWith("/") && projectPath) {
+            normalizedPath = `${projectPath}/${normalizedPath}`;
+          }
+
+          console.log("[handlePaste] Found file path in text:", normalizedPath);
+          filePaths.push(normalizedPath);
+        }
+      }
+
+      if (filePaths.length > 0) {
+        e.preventDefault();
+        console.log(
+          "[handlePaste] Processing file paths from clipboard:",
+          filePaths
+        );
+
+        setPrompt((currentPrompt) => {
+          const existingPaths = extractAllFilePaths(currentPrompt);
+          const newPaths = filePaths.filter((p) => !existingPaths.includes(p));
+
+          if (newPaths.length === 0) {
+            console.log("[handlePaste] All files already in prompt, skipping");
+            return currentPrompt;
+          }
+
+          const mentionsToAdd = newPaths
+            .map((p) => (p.includes(" ") ? `@"${p}"` : `@${p}`))
+            .join(" ");
+
+          const newPrompt =
+            currentPrompt +
+            (currentPrompt.endsWith(" ") || currentPrompt === "" ? "" : " ") +
+            mentionsToAdd +
+            " ";
+
+          setTimeout(() => {
+            const target = isExpanded
+              ? expandedTextareaRef.current
+              : textareaRef.current;
+            target?.focus();
+            target?.setSelectionRange(newPrompt.length, newPrompt.length);
+          }, 0);
+
+          return newPrompt;
+        });
+
+        return; // Successfully processed file paths, don't process as regular text
+      }
+    }
+
+    // Then check for images
     for (const item of items) {
       if (item.type.startsWith("image/")) {
         e.preventDefault();
@@ -1315,18 +1587,190 @@ const FloatingPromptInputInner = (
     }
   };
 
-  // Browser drag and drop handlers - just prevent default behavior
-  // Actual file handling is done via Tauri's window-level drag-drop events
+  // Browser drag and drop handlers - enhanced to handle text/URIs from editors
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    // Visual feedback is handled by Tauri events
+
+    // Show visual feedback
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    // File processing is handled by Tauri's onDragDropEvent
+    setDragActive(false);
+
+    console.log("[BROWSER DROP] Drop event received");
+
+    // Try to get text data from clipboard (this might work for editor drags)
+    const textData = e.dataTransfer.getData("text/plain");
+    const uriData = e.dataTransfer.getData("text/uri-list");
+
+    console.log("[BROWSER DROP] Text data:", textData);
+    console.log("[BROWSER DROP] URI data:", uriData);
+
+    // Check for file paths in the text data
+    if (textData && textData.trim()) {
+      const lines = textData
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+      const filePaths: string[] = [];
+
+      for (const line of lines) {
+        console.log("[BROWSER DROP] Processing line:", line);
+
+        // Check if this looks like a file path
+        if (
+          line.includes("/") &&
+          (line.endsWith(".tsx") ||
+            line.endsWith(".ts") ||
+            line.endsWith(".js") ||
+            line.endsWith(".jsx") ||
+            line.endsWith(".vue") ||
+            line.endsWith(".py") ||
+            line.endsWith(".java") ||
+            line.endsWith(".cpp") ||
+            line.endsWith(".c") ||
+            line.endsWith(".md") ||
+            line.endsWith(".txt") ||
+            line.endsWith(".json") ||
+            line.endsWith(".css") ||
+            line.endsWith(".scss") ||
+            line.endsWith(".html") ||
+            line.endsWith(".php") ||
+            line.endsWith(".rb") ||
+            line.endsWith(".go") ||
+            line.endsWith(".rs") ||
+            line.endsWith(".kt") ||
+            line.endsWith(".swift") ||
+            line.endsWith(".xml") ||
+            line.endsWith(".yml") ||
+            line.endsWith(".yaml"))
+        ) {
+          let normalizedPath = line;
+
+          // Handle tilde paths
+          if (normalizedPath.startsWith("~/")) {
+            const homeDir = process.env.HOME || process.env.USERPROFILE;
+            if (homeDir) {
+              normalizedPath = normalizedPath.replace("~", homeDir);
+            }
+          }
+
+          // Handle relative paths
+          if (!normalizedPath.startsWith("/") && projectPath) {
+            normalizedPath = `${projectPath}/${normalizedPath}`;
+          }
+
+          console.log("[BROWSER DROP] Found file path:", normalizedPath);
+          filePaths.push(normalizedPath);
+        }
+      }
+
+      if (filePaths.length > 0) {
+        console.log(
+          "[BROWSER DROP] Processing file paths from text:",
+          filePaths
+        );
+
+        setPrompt((currentPrompt) => {
+          const existingPaths = extractAllFilePaths(currentPrompt);
+          const newPaths = filePaths.filter((p) => !existingPaths.includes(p));
+
+          if (newPaths.length === 0) {
+            console.log("[BROWSER DROP] All files already in prompt, skipping");
+            return currentPrompt;
+          }
+
+          const mentionsToAdd = newPaths
+            .map((p) => (p.includes(" ") ? `@"${p}"` : `@${p}`))
+            .join(" ");
+
+          const newPrompt =
+            currentPrompt +
+            (currentPrompt.endsWith(" ") || currentPrompt === "" ? "" : " ") +
+            mentionsToAdd +
+            " ";
+
+          setTimeout(() => {
+            const target = isExpanded
+              ? expandedTextareaRef.current
+              : textareaRef.current;
+            target?.focus();
+            target?.setSelectionRange(newPrompt.length, newPrompt.length);
+          }, 0);
+
+          return newPrompt;
+        });
+
+        return; // Successfully processed text data
+      }
+    }
+
+    // Process URI data if available
+    if (uriData && uriData.trim()) {
+      const uris = uriData
+        .split("\n")
+        .map((uri) => uri.trim())
+        .filter((uri) => uri.length > 0);
+      const filePaths: string[] = [];
+
+      for (const uri of uris) {
+        console.log("[BROWSER DROP] Processing URI:", uri);
+
+        if (uri.startsWith("file://")) {
+          let path = decodeURIComponent(uri.replace("file://", ""));
+          console.log("[BROWSER DROP] Extracted file path from URI:", path);
+          filePaths.push(path);
+        }
+      }
+
+      if (filePaths.length > 0) {
+        console.log(
+          "[BROWSER DROP] Processing file paths from URIs:",
+          filePaths
+        );
+
+        setPrompt((currentPrompt) => {
+          const existingPaths = extractAllFilePaths(currentPrompt);
+          const newPaths = filePaths.filter((p) => !existingPaths.includes(p));
+
+          if (newPaths.length === 0) {
+            return currentPrompt;
+          }
+
+          const mentionsToAdd = newPaths
+            .map((p) => (p.includes(" ") ? `@"${p}"` : `@${p}`))
+            .join(" ");
+
+          const newPrompt =
+            currentPrompt +
+            (currentPrompt.endsWith(" ") || currentPrompt === "" ? "" : " ") +
+            mentionsToAdd +
+            " ";
+
+          setTimeout(() => {
+            const target = isExpanded
+              ? expandedTextareaRef.current
+              : textareaRef.current;
+            target?.focus();
+            target?.setSelectionRange(newPrompt.length, newPrompt.length);
+          }, 0);
+
+          return newPrompt;
+        });
+
+        return;
+      }
+    }
+
+    console.log("[BROWSER DROP] No usable file paths found in drop data");
   };
 
   const handleRemoveImage = (index: number) => {
@@ -1403,9 +1847,9 @@ const FloatingPromptInputInner = (
       <ToastContainer>
         {showVSCodeToast && (
           <Toast
-            message="VSCode drag not supported. Use @ to mention files or drag from Finder instead."
+            message="Code editor drag not fully supported. Try: @ to mention files, copy file path and paste, or drag from file manager."
             type="info"
-            duration={4000}
+            duration={5000}
             onDismiss={() => setShowVSCodeToast(false)}
           />
         )}
@@ -1803,7 +2247,7 @@ const FloatingPromptInputInner = (
             <div className="mt-2 text-xs text-muted-foreground">
               Press Enter to send, Shift+Enter for new line
               {projectPath?.trim() &&
-                ", @ to mention files, / for commands, drag & drop files or paste images"}
+                ", @ to mention files, / for commands, drag & drop files/paste file paths, paste images"}
             </div>
           </div>
         </div>

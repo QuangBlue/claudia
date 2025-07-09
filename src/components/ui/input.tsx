@@ -6,7 +6,7 @@ export interface InputProps
 
 /**
  * Input component for text/number inputs
- * 
+ *
  * @example
  * <Input type="text" placeholder="Enter value..." />
  */
@@ -24,8 +24,8 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
         )}
         style={{
           borderColor: "var(--color-input)",
-          backgroundColor: "transparent",
-          color: "var(--color-foreground)"
+          backgroundColor: "var(--color-card)",
+          color: "var(--color-foreground)",
         }}
         ref={ref}
         {...props}
@@ -36,4 +36,4 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
 
 Input.displayName = "Input";
 
-export { Input }; 
+export { Input };
