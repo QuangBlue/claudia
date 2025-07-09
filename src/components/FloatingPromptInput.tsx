@@ -249,7 +249,7 @@ const FloatingPromptInputInner = (
     let display = actualPrompt;
 
     // Replace image IDs with user-friendly placeholders
-    for (const [imageId, imageData] of imageDataMap.entries()) {
+    for (const [imageId] of imageDataMap.entries()) {
       const imageIdPattern = new RegExp(
         `@"${imageId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`,
         "g"
@@ -260,12 +260,12 @@ const FloatingPromptInputInner = (
     return display;
   };
 
-  // Function to convert display prompt back to actual prompt for processing
-  const convertDisplayToActual = (display: string): string => {
-    // This will be handled by maintaining the actual prompt separately
-    // Display prompt is just for viewing, actual prompt handles logic
-    return prompt; // Return the actual prompt, not the display one
-  };
+  // // Function to convert display prompt back to actual prompt for processing
+  // const convertDisplayToActual = (display: string): string => {
+  //   // This will be handled by maintaining the actual prompt separately
+  //   // Display prompt is just for viewing, actual prompt handles logic
+  //   return prompt; // Return the actual prompt, not the display one
+  // };
 
   // Update display prompt when actual prompt or imageDataMap changes
   useEffect(() => {
