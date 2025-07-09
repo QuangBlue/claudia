@@ -1594,7 +1594,7 @@ const FloatingPromptInputInner = (
         onDrop={handleDrop}
       >
         <div className="max-w-5xl mx-auto">
-          <div className="pl-4 pr-4 pt-2 pb-2">
+          <div className="p-2">
             {/* Image previews */}
             {embeddedImages.length > 0 && (
               <ImagePreview

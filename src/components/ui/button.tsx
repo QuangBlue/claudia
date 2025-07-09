@@ -10,16 +10,12 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default:
-          "bg-primary text-primary-foreground shadow hover:bg-primary/90",
-        destructive:
-          "bg-destructive text-destructive-foreground shadow-xs hover:bg-destructive/90",
-        outline:
-          "border border-input bg-background shadow-xs hover:bg-accent hover:text-accent-foreground",
-        secondary:
-          "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80",
-        ghost: "hover:bg-accent hover:text-accent-foreground",
-        link: "text-primary underline-offset-4 hover:underline",
+        default: "shadow",
+        destructive: "shadow-xs",
+        outline: "border shadow-xs",
+        secondary: "shadow-xs",
+        ghost: "",
+        link: "underline-offset-4 hover:underline",
       },
       size: {
         default: "h-9 px-4 py-2",
@@ -50,10 +46,82 @@ export interface ButtonProps
  * </Button>
  */
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, ...props }, ref) => {
+  ({ className, variant, size, style, ...props }, ref) => {
+    // Get theme-aware styles
+    const getVariantStyles = (variant: string) => {
+      switch (variant) {
+        case "default":
+          return {
+            backgroundColor: "var(--color-primary)",
+            color: "var(--color-primary-foreground)",
+            borderColor: "transparent",
+          };
+        case "destructive":
+          return {
+            backgroundColor: "var(--color-destructive)",
+            color: "var(--color-destructive-foreground)",
+            borderColor: "transparent",
+          };
+        case "outline":
+          return {
+            backgroundColor: "var(--color-card)",
+            color: "var(--color-foreground)",
+            borderColor: "var(--color-input)",
+          };
+        case "secondary":
+          return {
+            backgroundColor: "var(--color-secondary)",
+            color: "var(--color-secondary-foreground)",
+            borderColor: "transparent",
+          };
+        case "ghost":
+          return {
+            backgroundColor: "var(--color-card)",
+            color: "var(--color-foreground)",
+            borderColor: "transparent",
+          };
+        case "link":
+          return {
+            backgroundColor: "var(--color-card)",
+            color: "var(--color-primary)",
+            borderColor: "transparent",
+          };
+        default:
+          return {
+            backgroundColor: "var(--color-primary)",
+            color: "var(--color-primary-foreground)",
+            borderColor: "transparent",
+          };
+      }
+    };
+
+    const variantStyles = getVariantStyles(variant || "default");
+
     return (
       <button
         className={cn(buttonVariants({ variant, size, className }))}
+        style={{
+          ...variantStyles,
+          ...style,
+        }}
+        onMouseEnter={(e) => {
+          const target = e.currentTarget;
+          switch (variant) {
+            case "outline":
+            case "ghost":
+
+            default:
+              target.style.opacity = "0.9";
+              break;
+          }
+        }}
+        onMouseLeave={(e) => {
+          const target = e.currentTarget;
+          const resetStyles = getVariantStyles(variant || "default");
+          target.style.backgroundColor = resetStyles.backgroundColor;
+          target.style.color = resetStyles.color;
+          target.style.opacity = "1";
+        }}
         ref={ref}
         {...props}
       />
