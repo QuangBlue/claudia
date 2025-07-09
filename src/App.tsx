@@ -19,14 +19,14 @@ import { MCPManager } from "@/components/MCPManager";
 import { NFOCredits } from "@/components/NFOCredits";
 import { ClaudeBinaryDialog } from "@/components/ClaudeBinaryDialog";
 import { Toast, ToastContainer } from "@/components/ui/toast";
-import { ProjectSettings } from '@/components/ProjectSettings';
+import { ProjectSettings } from "@/components/ProjectSettings";
 
-type View = 
-  | "welcome" 
-  | "projects" 
-  | "editor" 
-  | "claude-file-editor" 
-  | "claude-code-session" 
+type View =
+  | "welcome"
+  | "projects"
+  | "editor"
+  | "claude-file-editor"
+  | "claude-code-session"
   | "settings"
   | "cc-agents"
   | "create-agent"
@@ -45,16 +45,27 @@ function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [editingClaudeFile, setEditingClaudeFile] = useState<ClaudeMdFile | null>(null);
+  const [editingClaudeFile, setEditingClaudeFile] =
+    useState<ClaudeMdFile | null>(null);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+  const [newSessionProjectPath, setNewSessionProjectPath] = useState<
+    string | null
+  >(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showNFO, setShowNFO] = useState(false);
   const [showClaudeBinaryDialog, setShowClaudeBinaryDialog] = useState(false);
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
-  const [activeClaudeSessionId, setActiveClaudeSessionId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "error" | "info";
+  } | null>(null);
+  const [activeClaudeSessionId, setActiveClaudeSessionId] = useState<
+    string | null
+  >(null);
   const [isClaudeStreaming, setIsClaudeStreaming] = useState(false);
-  const [projectForSettings, setProjectForSettings] = useState<Project | null>(null);
+  const [projectForSettings, setProjectForSettings] = useState<Project | null>(
+    null
+  );
   const [previousView, setPreviousView] = useState<View>("welcome");
 
   // Load projects on mount when in projects view
@@ -79,11 +90,23 @@ function App() {
       setShowClaudeBinaryDialog(true);
     };
 
-    window.addEventListener('claude-session-selected', handleSessionSelected as EventListener);
-    window.addEventListener('claude-not-found', handleClaudeNotFound as EventListener);
+    window.addEventListener(
+      "claude-session-selected",
+      handleSessionSelected as EventListener
+    );
+    window.addEventListener(
+      "claude-not-found",
+      handleClaudeNotFound as EventListener
+    );
     return () => {
-      window.removeEventListener('claude-session-selected', handleSessionSelected as EventListener);
-      window.removeEventListener('claude-not-found', handleClaudeNotFound as EventListener);
+      window.removeEventListener(
+        "claude-session-selected",
+        handleSessionSelected as EventListener
+      );
+      window.removeEventListener(
+        "claude-not-found",
+        handleClaudeNotFound as EventListener
+      );
     };
   }, []);
 
@@ -98,7 +121,9 @@ function App() {
       setProjects(projectList);
     } catch (err) {
       console.error("Failed to load projects:", err);
-      setError("Failed to load projects. Please ensure ~/.claude directory exists.");
+      setError(
+        "Failed to load projects. Please ensure ~/.claude directory exists."
+      );
     } finally {
       setLoading(false);
     }
@@ -128,6 +153,7 @@ function App() {
   const handleNewSession = async () => {
     handleViewChange("claude-code-session");
     setSelectedSession(null);
+    setNewSessionProjectPath(null);
   };
 
   /**
@@ -159,18 +185,22 @@ function App() {
    */
   const handleViewChange = (newView: View) => {
     // Check if we're navigating away from an active Claude session
-    if (view === "claude-code-session" && isClaudeStreaming && activeClaudeSessionId) {
+    if (
+      view === "claude-code-session" &&
+      isClaudeStreaming &&
+      activeClaudeSessionId
+    ) {
       const shouldLeave = window.confirm(
         "Claude is still responding. If you navigate away, Claude will continue running in the background.\n\n" +
-        "You can return to this session from the Projects view.\n\n" +
-        "Do you want to continue?"
+          "You can return to this session from the Projects view.\n\n" +
+          "Do you want to continue?"
       );
-      
+
       if (!shouldLeave) {
         return;
       }
     }
-    
+
     setView(newView);
   };
 
@@ -187,12 +217,12 @@ function App() {
    */
   const handleProjectSettingsFromPath = (projectPath: string) => {
     // Create a temporary project object from the path
-    const projectId = projectPath.replace(/[^a-zA-Z0-9]/g, '-');
+    const projectId = projectPath.replace(/[^a-zA-Z0-9]/g, "-");
     const tempProject: Project = {
       id: projectId,
       path: projectPath,
       sessions: [],
-      created_at: Date.now() / 1000
+      created_at: Date.now() / 1000,
     };
     setProjectForSettings(tempProject);
     setPreviousView(view);
@@ -203,7 +233,10 @@ function App() {
     switch (view) {
       case "welcome":
         return (
-          <div className="flex items-center justify-center p-4" style={{ height: "100%" }}>
+          <div
+            className="flex items-center justify-center p-4"
+            style={{ height: "100%" }}
+          >
             <div className="w-full max-w-4xl">
               {/* Welcome Header */}
               <motion.div
@@ -226,7 +259,7 @@ function App() {
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.5, delay: 0.1 }}
                 >
-                  <Card 
+                  <Card
                     className="h-64 cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-lg border border-border/50 shimmer-hover trailing-border"
                     onClick={() => handleViewChange("cc-agents")}
                   >
@@ -243,7 +276,7 @@ function App() {
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.5, delay: 0.2 }}
                 >
-                  <Card 
+                  <Card
                     className="h-64 cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-lg border border-border/50 shimmer-hover trailing-border"
                     onClick={() => handleViewChange("projects")}
                   >
@@ -253,18 +286,13 @@ function App() {
                     </div>
                   </Card>
                 </motion.div>
-
               </div>
             </div>
           </div>
         );
 
       case "cc-agents":
-        return (
-          <CCAgents 
-            onBack={() => handleViewChange("welcome")} 
-          />
-        );
+        return <CCAgents onBack={() => handleViewChange("welcome")} />;
 
       case "editor":
         return (
@@ -272,14 +300,14 @@ function App() {
             <MarkdownEditor onBack={() => handleViewChange("welcome")} />
           </div>
         );
-      
+
       case "settings":
         return (
           <div className="flex-1 flex flex-col" style={{ minHeight: 0 }}>
             <Settings onBack={() => handleViewChange("welcome")} />
           </div>
         );
-      
+
       case "projects":
         return (
           <div className="flex-1 overflow-y-auto">
@@ -300,7 +328,9 @@ function App() {
                   ← Back to Home
                 </Button>
                 <div className="mb-4">
-                  <h1 className="text-3xl font-bold tracking-tight">CC Projects</h1>
+                  <h1 className="text-3xl font-bold tracking-tight">
+                    CC Projects
+                  </h1>
                   <p className="mt-1 text-sm text-muted-foreground">
                     Browse your Claude Code sessions
                   </p>
@@ -341,6 +371,12 @@ function App() {
                         projectPath={selectedProject.path}
                         onBack={handleBack}
                         onEditClaudeFile={handleEditClaudeFile}
+                        onNewSession={(projectPath) => {
+                          // Set the initial project path and navigate to Claude Code session
+                          setSelectedSession(null);
+                          setNewSessionProjectPath(projectPath);
+                          handleViewChange("claude-code-session");
+                        }}
                       />
                     </motion.div>
                   ) : (
@@ -394,7 +430,7 @@ function App() {
             </div>
           </div>
         );
-      
+
       case "claude-file-editor":
         return editingClaudeFile ? (
           <ClaudeFileEditor
@@ -402,13 +438,15 @@ function App() {
             onBack={handleBackFromClaudeFileEditor}
           />
         ) : null;
-      
+
       case "claude-code-session":
         return (
           <ClaudeCodeSession
             session={selectedSession || undefined}
+            initialProjectPath={newSessionProjectPath || undefined}
             onBack={() => {
               setSelectedSession(null);
+              setNewSessionProjectPath(null);
               handleViewChange("projects");
             }}
             onStreamingChange={(isStreaming, sessionId) => {
@@ -418,17 +456,13 @@ function App() {
             onProjectSettings={handleProjectSettingsFromPath}
           />
         );
-      
+
       case "usage-dashboard":
-        return (
-          <UsageDashboard onBack={() => handleViewChange("welcome")} />
-        );
-      
+        return <UsageDashboard onBack={() => handleViewChange("welcome")} />;
+
       case "mcp":
-        return (
-          <MCPManager onBack={() => handleViewChange("welcome")} />
-        );
-      
+        return <MCPManager onBack={() => handleViewChange("welcome")} />;
+
       case "project-settings":
         if (projectForSettings) {
           return (
@@ -442,7 +476,7 @@ function App() {
           );
         }
         break;
-      
+
       default:
         return null;
     }
@@ -459,27 +493,28 @@ function App() {
           onMCPClick={() => handleViewChange("mcp")}
           onInfoClick={() => setShowNFO(true)}
         />
-        
+
         {/* Main Content */}
-        <div className="flex-1 overflow-y-auto">
-          {renderContent()}
-        </div>
-        
+        <div className="flex-1 overflow-y-auto">{renderContent()}</div>
+
         {/* NFO Credits Modal */}
         {showNFO && <NFOCredits onClose={() => setShowNFO(false)} />}
-        
+
         {/* Claude Binary Dialog */}
         <ClaudeBinaryDialog
           open={showClaudeBinaryDialog}
           onOpenChange={setShowClaudeBinaryDialog}
           onSuccess={() => {
-            setToast({ message: "Claude binary path saved successfully", type: "success" });
+            setToast({
+              message: "Claude binary path saved successfully",
+              type: "success",
+            });
             // Trigger a refresh of the Claude version check
             window.location.reload();
           }}
           onError={(message) => setToast({ message, type: "error" })}
         />
-        
+
         {/* Toast Container */}
         <ToastContainer>
           {toast && (

@@ -1,12 +1,24 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FileText, ArrowLeft, Calendar, Clock, MessageSquare } from "lucide-react";
+import {
+  FileText,
+  ArrowLeft,
+  Calendar,
+  Clock,
+  MessageSquare,
+  Plus,
+} from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Pagination } from "@/components/ui/pagination";
 import { ClaudeMemoriesDropdown } from "@/components/ClaudeMemoriesDropdown";
 import { cn } from "@/lib/utils";
-import { formatUnixTimestamp, formatISOTimestamp, truncateText, getFirstLine } from "@/lib/date-utils";
+import {
+  formatUnixTimestamp,
+  formatISOTimestamp,
+  truncateText,
+  getFirstLine,
+} from "@/lib/date-utils";
 import type { Session, ClaudeMdFile } from "@/lib/api";
 
 interface SessionListProps {
@@ -31,6 +43,10 @@ interface SessionListProps {
    */
   onEditClaudeFile?: (file: ClaudeMdFile) => void;
   /**
+   * Callback when new session button is clicked
+   */
+  onNewSession?: (projectPath: string) => void;
+  /**
    * Optional className for styling
    */
   className?: string;
@@ -40,7 +56,7 @@ const ITEMS_PER_PAGE = 5;
 
 /**
  * SessionList component - Displays paginated sessions for a specific project
- * 
+ *
  * @example
  * <SessionList
  *   sessions={sessions}
@@ -55,21 +71,22 @@ export const SessionList: React.FC<SessionListProps> = ({
   onBack,
   onSessionClick,
   onEditClaudeFile,
+  onNewSession,
   className,
 }) => {
   const [currentPage, setCurrentPage] = useState(1);
-  
+
   // Calculate pagination
   const totalPages = Math.ceil(sessions.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const endIndex = startIndex + ITEMS_PER_PAGE;
   const currentSessions = sessions.slice(startIndex, endIndex);
-  
+
   // Reset to page 1 if sessions change
   React.useEffect(() => {
     setCurrentPage(1);
   }, [sessions.length]);
-  
+
   return (
     <div className={cn("space-y-4", className)}>
       <motion.div
@@ -89,17 +106,35 @@ export const SessionList: React.FC<SessionListProps> = ({
         <div className="flex-1 min-w-0">
           <h2 className="text-base font-medium truncate">{projectPath}</h2>
           <p className="text-xs text-muted-foreground">
-            {sessions.length} session{sessions.length !== 1 ? 's' : ''}
+            {sessions.length} session{sessions.length !== 1 ? "s" : ""}
           </p>
         </div>
       </motion.div>
+
+      {/* New Session Button */}
+      {onNewSession && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.1 }}
+        >
+          <Button
+            onClick={() => onNewSession(projectPath)}
+            size="default"
+            className="w-full"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            New Claude Code session
+          </Button>
+        </motion.div>
+      )}
 
       {/* CLAUDE.md Memories Dropdown */}
       {onEditClaudeFile && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.1 }}
+          transition={{ duration: 0.3, delay: 0.2 }}
         >
           <ClaudeMemoriesDropdown
             projectPath={projectPath}
@@ -129,8 +164,8 @@ export const SessionList: React.FC<SessionListProps> = ({
                 )}
                 onClick={() => {
                   // Emit a special event for Claude Code session navigation
-                  const event = new CustomEvent('claude-session-selected', { 
-                    detail: { session, projectPath } 
+                  const event = new CustomEvent("claude-session-selected", {
+                    detail: { session, projectPath },
                   });
                   window.dispatchEvent(event);
                   onSessionClick?.(session);
@@ -142,8 +177,10 @@ export const SessionList: React.FC<SessionListProps> = ({
                       <div className="flex items-start space-x-3 flex-1 min-w-0">
                         <FileText className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                         <div className="space-y-1 flex-1 min-w-0">
-                          <p className="font-mono text-xs text-muted-foreground">{session.id}</p>
-                          
+                          <p className="font-mono text-xs text-muted-foreground">
+                            {session.id}
+                          </p>
+
                           {/* First message preview */}
                           {session.first_message && (
                             <div className="space-y-1">
@@ -152,24 +189,28 @@ export const SessionList: React.FC<SessionListProps> = ({
                                 <span>First message:</span>
                               </div>
                               <p className="text-xs line-clamp-2 text-foreground/80">
-                                {truncateText(getFirstLine(session.first_message), 100)}
+                                {truncateText(
+                                  getFirstLine(session.first_message),
+                                  100
+                                )}
                               </p>
                             </div>
                           )}
-                          
+
                           {/* Metadata */}
                           <div className="flex items-center space-x-3 text-xs text-muted-foreground">
                             {/* Message timestamp if available, otherwise file creation time */}
                             <div className="flex items-center space-x-1">
                               <Clock className="h-3 w-3" />
                               <span>
-                                {session.message_timestamp 
-                                  ? formatISOTimestamp(session.message_timestamp)
-                                  : formatUnixTimestamp(session.created_at)
-                                }
+                                {session.message_timestamp
+                                  ? formatISOTimestamp(
+                                      session.message_timestamp
+                                    )
+                                  : formatUnixTimestamp(session.created_at)}
                               </span>
                             </div>
-                            
+
                             {session.todo_data && (
                               <div className="flex items-center space-x-1">
                                 <Calendar className="h-3 w-3" />
@@ -187,7 +228,7 @@ export const SessionList: React.FC<SessionListProps> = ({
           ))}
         </div>
       </AnimatePresence>
-      
+
       <Pagination
         currentPage={currentPage}
         totalPages={totalPages}
@@ -195,4 +236,4 @@ export const SessionList: React.FC<SessionListProps> = ({
       />
     </div>
   );
-}; 
+};

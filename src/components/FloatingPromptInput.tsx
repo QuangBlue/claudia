@@ -1455,7 +1455,7 @@ const FloatingPromptInputInner = (
                 onChange={handleTextChange}
                 onPaste={handlePaste}
                 placeholder="Type your prompt here..."
-                className="min-h-[400px] max-h-[800px] resize-none overflow-auto"
+                className="min-h-[400px] max-h-[800px] resize-none overflow-auto textarea-custom-border"
                 disabled={disabled}
                 onDragEnter={handleDrag}
                 onDragLeave={handleDrag}
@@ -1617,14 +1617,10 @@ const FloatingPromptInputInner = (
                   }
                   disabled={disabled}
                   className={cn(
-                    "min-h-[100px] max-h-[300px] resize-none pr-10 overflow-auto"
+                    "min-h-[100px] max-h-[300px] resize-none pr-10 overflow-auto",
+                    "textarea-custom-border"
                   )}
                   rows={1}
-                  style={{
-                    backgroundColor: "var(--color-card)",
-                    border:
-                      "1px solid color-mix(in srgb, var(--color-foreground) 12%, transparent)",
-                  }}
                 />
 
                 <Button

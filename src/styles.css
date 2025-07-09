@@ -124,8 +124,6 @@ button:disabled,
 /* Specifically remove focus styles from form elements */
 input:focus,
 input:focus-visible,
-textarea:focus,
-textarea:focus-visible,
 select:focus,
 select:focus-visible,
 button:focus,
@@ -137,6 +135,30 @@ button:focus-visible,
   outline: none !important;
   box-shadow: none !important;
   border-color: var(--color-input) !important;
+}
+
+/* Special handling for textarea to preserve custom border */
+textarea:focus,
+textarea:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  /* Don't override border-color for textarea - let inline styles handle it */
+}
+
+/* Custom textarea with preserved border */
+.textarea-custom-border {
+  border: 1px solid color-mix(in srgb, var(--color-foreground) 12%, transparent) !important;
+  background-color: var(--color-card) !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.textarea-custom-border:focus,
+.textarea-custom-border:focus-visible {
+  border: 1px solid color-mix(in srgb, var(--color-foreground) 12%, transparent) !important;
+  background-color: var(--color-card) !important;
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 /* Remove ring styles */
